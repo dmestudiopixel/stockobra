@@ -632,11 +632,13 @@ let me=null, ncfg={token:'',pv:'',fa:'',it:'',re:''};
 let delTarget=null, irc=0;
 
 function loadLS(){
-  const d=localStorage.getItem('so_db');if(d)db=JSON.parse(d);
-  const u=localStorage.getItem('so_us');if(u)users=JSON.parse(u);
-  const c=localStorage.getItem('so_cf');if(c)ncfg=JSON.parse(c);
-  const s=localStorage.getItem('so_se');
-  if(s){const id=JSON.parse(s);me=users.find(x=>x.id===id);}
+  try{
+    const d=localStorage.getItem('so_db');if(d)db=JSON.parse(d);
+    const u=localStorage.getItem('so_us');if(u)users=JSON.parse(u);
+    const c=localStorage.getItem('so_cf');if(c)ncfg=JSON.parse(c);
+    const s=localStorage.getItem('so_se');
+    if(s){const id=JSON.parse(s);me=users.find(x=>x.id===id);}
+  }catch(e){console.log('storage unavailable');}
 }
 function sDB(){localStorage.setItem('so_db',JSON.stringify(db));}
 function sUS(){localStorage.setItem('so_us',JSON.stringify(users));}
@@ -645,11 +647,18 @@ function isAdm(){return me&&me.rol==='admin';}
 
 // ─── AUTH ───────────────────────────────────
 function login(){
-  const u=document.getElementById('lu').value.trim();
-  const p=document.getElementById('lp').value;
-  const f=users.find(x=>x.login===u&&x.pass===p);
-  if(!f){document.getElementById('lerr').style.display='block';document.getElementById('lp').value='';return;}
-  me=f;localStorage.setItem('so_se',JSON.stringify(f.id));showApp();
+  const u=document.getElementById('lu').value.trim().toLowerCase();
+  const p=document.getElementById('lp').value.trim();
+  // try both field names for compatibility
+  const f=users.find(x=>(x.login===u||x.username===u)&&(x.pass===p||x.password===p));
+  if(!f){
+    document.getElementById('lerr').style.display='block';
+    document.getElementById('lp').value='';
+    return;
+  }
+  me=f;
+  try{localStorage.setItem('so_se',JSON.stringify(f.id));}catch(e){}
+  showApp();
 }
 function logout(){
   me=null;localStorage.removeItem('so_se');
@@ -659,8 +668,10 @@ function logout(){
   document.getElementById('lerr').style.display='none';
 }
 function showApp(){
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('app').style.display='flex';
+  const ls=document.getElementById('login-screen');
+  const ap=document.getElementById('app');
+  if(ls) ls.style.display='none';
+  if(ap){ap.style.display='flex';}
   const av=document.getElementById('tbav');
   av.textContent=me.nombre.charAt(0).toUpperCase();
   av.className='avatar '+(isAdm()?'av-admin':'av-op');
@@ -1310,7 +1321,21 @@ function goHistFac(facId){
 }
 
 // ─── INIT ────────────────────────────────────
+// Always ensure default users exist
+if(!users.find(u=>u.login==='admin')){
+  users=[
+    {id:'u1',nombre:'Administrador',login:'admin',username:'admin',pass:'admin123',password:'admin123',rol:'admin'},
+    {id:'u2',nombre:'Operador Obra',login:'operador',username:'operador',pass:'obra2025',password:'obra2025',rol:'operador'}
+  ];
+}
 loadLS();
+// Re-ensure defaults after loadLS in case of corrupted storage
+if(!users||!users.length||!users.find(u=>u.login==='admin'||u.username==='admin')){
+  users=[
+    {id:'u1',nombre:'Administrador',login:'admin',username:'admin',pass:'admin123',password:'admin123',rol:'admin'},
+    {id:'u2',nombre:'Operador Obra',login:'operador',username:'operador',pass:'obra2025',password:'obra2025',rol:'operador'}
+  ];
+}
 const td=new Date().toISOString().split('T')[0];
 ['fn-f','rn-fe'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=td;});
 if(me)showApp();
