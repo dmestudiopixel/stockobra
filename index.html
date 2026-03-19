@@ -629,14 +629,16 @@ let users=[
   {id:'u1',nombre:'Administrador',login:'admin',pass:'admin123',rol:'admin'},
   {id:'u2',nombre:'Operador Obra',login:'operador',pass:'obra2025',rol:'operador'}
 ];
-let me=null, ncfg={token:'',pv:'',fa:'',it:'',re:''};
+let me=null, ncfg={token:'ntn_B28570420407v0K9hf3qBoyef4tz7NUbqYUY7yhybeUbg2',pv:'9c2db23b866d43c78e081e01396f2b03',fa:'c148ea2f9c1048a4ab3727f47791750f',it:'3123b05ac55c4323a7599765746d3b7a',re:'8acd8d98b2a34cf583b2c0b77c7b6153'};
 let delTarget=null, irc=0;
 
 function loadLS(){
   try{
     const d=localStorage.getItem('so_db');if(d)db=JSON.parse(d);
     const u=localStorage.getItem('so_us');if(u)users=JSON.parse(u);
-    const c=localStorage.getItem('so_cf');if(c)ncfg=JSON.parse(c);
+    // Only load saved config if it has a token, otherwise keep hardcoded defaults
+    const c=localStorage.getItem('so_cf');
+    if(c){const parsed=JSON.parse(c);if(parsed.token)ncfg=parsed;}
     const s=localStorage.getItem('so_se');
     if(s){const id=JSON.parse(s);me=users.find(x=>x.id===id);}
   }catch(e){console.log('storage unavailable');}
@@ -966,14 +968,34 @@ function rstAIRem(){document.getElementById('air-res').style.display='none';docu
 
 // ─── CARGAR DATOS DESDE NOTION ───────────────
 async function loadFromNotion(){
-  if(!ncfg.token||!ncfg.pv) return; // no config yet
   const statusEl = document.getElementById('notion-sync-status');
-  if(statusEl) statusEl.textContent = '⟳ Sincronizando...';
   
-  try{
-    // Load proveedores
-    if(ncfg.pv){
+  // Check config
+  if(!ncfg.token){
+    toast('Configurá el token de Notion primero', true);
+    if(statusEl) statusEl.textContent = '✕ Sin token';
+    return;
+  }
+  if(!ncfg.pv && !ncfg.fa && !ncfg.it && !ncfg.re){
+    toast('Configurá los IDs de las bases de datos primero', true);
+    if(statusEl) statusEl.textContent = '✕ Sin IDs';
+    return;
+  }
+  
+  if(statusEl) statusEl.textContent = '⟳ Sincronizando...';
+  console.log('🔄 Iniciando sync con Notion...');
+  console.log('Token:', ncfg.token ? ncfg.token.substring(0,20)+'...' : 'VACÍO');
+  console.log('DB Proveedores:', ncfg.pv || 'VACÍO');
+  console.log('DB Facturas:', ncfg.fa || 'VACÍO');
+  
+  let errores = [];
+  
+  // Load proveedores
+  if(ncfg.pv){
+    try{
+      console.log('📥 Cargando proveedores...');
       const r = await notionAPI('/databases/'+ncfg.pv+'/query','POST',{page_size:100});
+      console.log('Respuesta proveedores:', r);
       if(r.results){
         db.proveedores = r.results.map(p=>({
           id: p.id,
@@ -982,11 +1004,20 @@ async function loadFromNotion(){
           telefono: p.properties['Teléfono']?.phone_number || '',
           condicion: p.properties['Condición de pago']?.select?.name || 'Contado'
         })).filter(p=>p.nombre);
+        console.log('✓ Proveedores cargados:', db.proveedores.length);
+      } else {
+        console.log('⚠️ Sin results en proveedores:', r);
+        errores.push('Proveedores: '+(r.message||r.code||JSON.stringify(r).substring(0,60)));
       }
-    }
-    // Load facturas
-    if(ncfg.fa){
+    }catch(e){ console.error('✕ Error proveedores:',e); errores.push('Proveedores: '+e.message); }
+  }
+
+  // Load facturas
+  if(ncfg.fa){
+    try{
+      console.log('📥 Cargando facturas...');
       const r = await notionAPI('/databases/'+ncfg.fa+'/query','POST',{page_size:100});
+      console.log('Respuesta facturas:', r);
       if(r.results){
         db.facturas = r.results.map(f=>({
           id: f.id,
@@ -996,10 +1027,17 @@ async function loadFromNotion(){
           monto: f.properties['Monto total']?.number || 0,
           estado: f.properties['Estado']?.select?.name || 'Abierta'
         })).filter(f=>f.numero);
+        console.log('✓ Facturas cargadas:', db.facturas.length);
+      } else {
+        errores.push('Facturas: '+(r.message||r.code||JSON.stringify(r).substring(0,60)));
       }
-    }
-    // Load items
-    if(ncfg.it){
+    }catch(e){ console.error('✕ Error facturas:',e); errores.push('Facturas: '+e.message); }
+  }
+
+  // Load items
+  if(ncfg.it){
+    try{
+      console.log('📥 Cargando ítems...');
       const r = await notionAPI('/databases/'+ncfg.it+'/query','POST',{page_size:100});
       if(r.results){
         db.items = r.results.map(i=>({
@@ -1010,10 +1048,17 @@ async function loadFromNotion(){
           entregada: i.properties['Cantidad entregada']?.number || 0,
           unidad: i.properties['Unidad']?.select?.name || 'unidad'
         })).filter(i=>i.material);
+        console.log('✓ Items cargados:', db.items.length);
+      } else {
+        errores.push('Items: '+(r.message||r.code||JSON.stringify(r).substring(0,60)));
       }
-    }
-    // Load remitos
-    if(ncfg.re){
+    }catch(e){ console.error('✕ Error items:',e); errores.push('Items: '+e.message); }
+  }
+
+  // Load remitos
+  if(ncfg.re){
+    try{
+      console.log('📥 Cargando remitos...');
       const r = await notionAPI('/databases/'+ncfg.re+'/query','POST',{page_size:100});
       if(r.results){
         db.remitos = r.results.map(r2=>({
@@ -1023,16 +1068,28 @@ async function loadFromNotion(){
           fecha: r2.properties['Fecha']?.date?.start || '',
           notas: r2.properties['Notas']?.rich_text?.[0]?.text?.content || ''
         })).filter(r2=>r2.numero);
+        console.log('✓ Remitos cargados:', db.remitos.length);
+      } else {
+        errores.push('Remitos: '+(r.message||r.code||JSON.stringify(r).substring(0,60)));
       }
-    }
-    sDB(); // save to localStorage as cache
-    if(statusEl) statusEl.textContent = '✓ Sincronizado';
-    rdash(); // refresh dashboard
-    toast('Datos sincronizados desde Notion');
-  }catch(e){
-    console.log('Error loading from Notion:',e);
-    if(statusEl) statusEl.textContent = '✕ Error al sincronizar';
+    }catch(e){ console.error('✕ Error remitos:',e); errores.push('Remitos: '+e.message); }
   }
+
+  sDB();
+  
+  if(errores.length > 0){
+    const msg = 'Errores: '+errores.join(' | ');
+    console.error('✕ Errores en sync:', errores);
+    if(statusEl) statusEl.textContent = '✕ Error';
+    toast(msg, true);
+  } else {
+    if(statusEl) statusEl.textContent = '✓ Sincronizado';
+    toast('✓ Datos cargados desde Notion ('+db.proveedores.length+' prov, '+db.facturas.length+' fac)');
+  }
+  
+  rdash();
+  const act = document.querySelector('.screen.active');
+  if(act) render(act.id.replace('screen-',''));
 }
 
 // ─── NOTION (via proxy) ──────────────────────
