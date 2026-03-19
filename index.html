@@ -647,17 +647,39 @@ function isAdm(){return me&&me.rol==='admin';}
 
 // ─── AUTH ───────────────────────────────────
 function login(){
-  const u=document.getElementById('lu').value.trim().toLowerCase();
-  const p=document.getElementById('lp').value.trim();
-  // try both field names for compatibility
-  const f=users.find(x=>(x.login===u||x.username===u)&&(x.pass===p||x.password===p));
-  if(!f){
-    document.getElementById('lerr').style.display='block';
+  const u=(document.getElementById('lu').value||'').trim().toLowerCase();
+  const p=(document.getElementById('lp').value||'').trim();
+  const errEl=document.getElementById('lerr');
+  // hardcoded fallback always works
+  const defaults=[
+    {id:'u1',nombre:'Administrador',login:'admin',pass:'admin123',rol:'admin'},
+    {id:'u2',nombre:'Operador Obra',login:'operador',pass:'obra2025',rol:'operador'}
+  ];
+  // merge with any custom users
+  const allUsers=[...defaults];
+  try{
+    const stored=localStorage.getItem('so_us');
+    if(stored){
+      const parsed=JSON.parse(stored);
+      parsed.forEach(pu=>{
+        if(!allUsers.find(x=>x.id===pu.id)) allUsers.push(pu);
+      });
+    }
+  }catch(e){}
+  const found=allUsers.find(x=>{
+    const l=(x.login||x.username||'').toLowerCase();
+    const pw=x.pass||x.password||'';
+    return l===u && pw===p;
+  });
+  if(!found){
+    errEl.style.display='block';
     document.getElementById('lp').value='';
     return;
   }
-  me=f;
-  try{localStorage.setItem('so_se',JSON.stringify(f.id));}catch(e){}
+  errEl.style.display='none';
+  me=found;
+  users=allUsers;
+  try{localStorage.setItem('so_se',JSON.stringify(found.id));}catch(e){}
   showApp();
 }
 function logout(){
