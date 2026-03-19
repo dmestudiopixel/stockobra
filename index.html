@@ -16,7 +16,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .llogo{font-size:26px;font-weight:700;letter-spacing:-.5px;margin-bottom:2px;}
 .ltag{font-size:12px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:28px;}
 .lerr{background:var(--red-bg);border:1px solid #5a1010;border-radius:8px;padding:10px 14px;font-size:13px;color:var(--red);margin-bottom:14px;display:none;}
-.demo-hint{margin-top:16px;padding:12px;background:var(--bg3);border-radius:8px;font-size:12px;color:var(--text3);line-height:1.7;}
+
 
 /* APP */
 #app{display:none;height:100vh;flex-direction:column;}
@@ -189,10 +189,8 @@ textarea{resize:vertical;min-height:70px;}
       <input type="password" id="lp" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
     </div>
     <button class="btn btn-p" style="width:100%;justify-content:center;padding:11px" onclick="login()">Ingresar</button>
-    <div class="demo-hint">
-      <strong style="color:var(--text2)">Usuarios de prueba:</strong><br>
-      admin / admin123 &nbsp;·&nbsp; operador / obra2025
-    </div>
+    <div style="margin-top:12px;text-align:center;font-size:12px;color:var(--text3)">¿Problemas para ingresar? Contactá al administrador.</div>
+
   </div>
 </div>
 
@@ -434,7 +432,7 @@ textarea{resize:vertical;min-height:70px;}
       <div class="screen" id="screen-usuarios">
         <div class="pg-hd">
           <div class="pg-title">Gestión de usuarios</div>
-          <button class="btn btn-p btn-sm" onclick="openM('m-usr')">+ Nuevo usuario</button>
+          <button class="btn btn-p btn-sm" onclick="openNewUsr()">+ Nuevo usuario</button>
         </div>
         <div id="ulist"></div>
         <div style="margin-top:16px;padding:14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-size:12px;color:var(--text3)">
@@ -580,9 +578,10 @@ textarea{resize:vertical;min-height:70px;}
   <div class="modal">
     <div class="mhd"><div class="mtitle">Nuevo usuario</div><button class="mclose" onclick="closeM('m-usr')">✕</button></div>
     <div class="mbody">
+      <input type="hidden" id="u-edit-id">
       <div class="fgrid">
         <div class="fg fgfull"><label>Nombre completo *</label><input id="un" placeholder="Ej: Juan García"></div>
-        <div class="fg"><label>Usuario (para login) *</label><input id="ul" placeholder="Ej: juangarcia"></div>
+        <div class="fg"><label>Usuario (para login) *</label><input id="ul" placeholder="Ej: juangarcia" autocapitalize="none"></div>
         <div class="fg"><label>Contraseña *</label><input type="password" id="up" placeholder="Mínimo 6 caracteres"></div>
         <div class="fg fgfull"><label>Rol *</label>
           <select id="ur">
@@ -592,7 +591,7 @@ textarea{resize:vertical;min-height:70px;}
         </div>
       </div>
     </div>
-    <div class="mfoot"><button class="btn btn-s" onclick="closeM('m-usr')">Cancelar</button><button class="btn btn-p" onclick="saveUsr()">Guardar usuario</button></div>
+    <div class="mfoot"><button class="btn btn-s" onclick="closeM('m-usr')">Cancelar</button><button class="btn btn-p" onclick="saveUsr()">Guardar</button></div>
   </div>
 </div>
 
@@ -615,6 +614,23 @@ textarea{resize:vertical;min-height:70px;}
     <div class="mfoot">
       <button class="btn btn-s" onclick="closeM('m-del')">Cancelar</button>
       <button class="btn btn-d" onclick="confirmDel()">🗑 Eliminar definitivamente</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CAMBIAR CONTRASEÑA -->
+<div class="moverlay" id="m-chgpass">
+  <div class="modal" style="max-width:360px">
+    <div class="mhd"><div class="mtitle">Cambiar mi contraseña</div><button class="mclose" onclick="closeM('m-chgpass')">✕</button></div>
+    <div class="mbody">
+      <div class="fg"><label>Contraseña actual</label><input type="password" id="cp-old" placeholder="Contraseña actual"></div>
+      <div class="fg"><label>Nueva contraseña</label><input type="password" id="cp-new" placeholder="Mínimo 6 caracteres"></div>
+      <div class="fg"><label>Repetir nueva contraseña</label><input type="password" id="cp-new2" placeholder="Repetir contraseña"></div>
+      <div id="cp-err" style="font-size:12px;color:var(--red);margin-top:6px;display:none"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-s" onclick="closeM('m-chgpass')">Cancelar</button>
+      <button class="btn btn-p" onclick="doChgPass()">Guardar contraseña</button>
     </div>
   </div>
 </div>
@@ -845,12 +861,27 @@ function rstock(){
 // ─── RENDER USUARIOS ─────────────────────────
 function rusrs(){
   if(!isAdm())return;
-  document.getElementById('ulist').innerHTML=users.map(u=>{
+  const list = document.getElementById('ulist');
+  if(!users.length){list.innerHTML='<div style="text-align:center;padding:30px;color:var(--text3)">Sin usuarios cargados</div>';return;}
+  list.innerHTML=users.map(u=>{
     const im=u.id===me.id;
     const ac=u.rol==='admin'?'av-admin':'av-op';
     const rb=u.rol==='admin'?'<span class="badge bb">Admin</span>':'<span class="badge bg">Operador</span>';
-    const d=im?`<button class="btn btn-g btn-sm btn-lock">🗑 Eliminar</button>`:`<button class="btn btn-d btn-sm" onclick="askDel('usuario','${u.id}','usuario @${u.login}')">🗑 Eliminar</button>`;
-    return`<div class="ucard"><div class="ucinfo"><div class="avatar avlg ${ac}">${u.nombre.charAt(0).toUpperCase()}</div><div><div class="ucname">${u.nombre}${im?' <span style="font-size:11px;color:var(--text3)">(vos)</span>':''}</div><div class="uclogin">@${u.login}</div></div></div><div class="ucact">${rb}${d}</div></div>`;
+    const editBtn=`<button class="btn btn-g btn-sm" onclick="editUsr('${u.id}')">✏️ Editar</button>`;
+    const delBtn=im
+      ? `<button class="btn btn-g btn-sm" style="opacity:.4;cursor:not-allowed" title="No podés eliminar tu propio usuario">🗑</button>`
+      : `<button class="btn btn-d btn-sm" onclick="askDel('usuario','${u.id}','usuario @${u.login}')">🗑 Eliminar</button>`;
+    const passBtn=im?`<button class="btn btn-g btn-sm" onclick="openChgPass()">🔑 Mi contraseña</button>`:'';
+    return`<div class="ucard">
+      <div class="ucinfo">
+        <div class="avatar avlg ${ac}">${u.nombre.charAt(0).toUpperCase()}</div>
+        <div>
+          <div class="ucname">${u.nombre}${im?' <span style="font-size:11px;color:var(--text3)">(vos)</span>':''}</div>
+          <div class="uclogin">@${u.login} &nbsp;·&nbsp; ${rb}</div>
+        </div>
+      </div>
+      <div class="ucact">${editBtn}${passBtn}${delBtn}</div>
+    </div>`;
   }).join('');
 }
 
@@ -866,14 +897,59 @@ function savePv(){
 
 // ─── SAVE USUARIO ────────────────────────────
 function saveUsr(){
-  const n=document.getElementById('un').value.trim(),l=document.getElementById('ul').value.trim().toLowerCase(),p=document.getElementById('up').value,r=document.getElementById('ur').value;
-  if(!n||!l||!p)return toast('Completá todos los campos',true);
-  if(p.length<6)return toast('Contraseña mínimo 6 caracteres',true);
-  if(users.find(x=>x.login===l))return toast('Ese usuario ya existe',true);
-  users.push({id:'u_'+Date.now(),nombre:n,login:l,pass:p,rol:r});
-  sUS();closeM('m-usr');toast('Usuario creado');
+  const n=document.getElementById('un').value.trim();
+  const l=document.getElementById('ul').value.trim().toLowerCase();
+  const p=document.getElementById('up').value;
+  const r=document.getElementById('ur').value;
+  const editId=document.getElementById('u-edit-id').value;
+
+  if(!n||!l)return toast('Completá nombre y usuario',true);
+  if(!editId && !p)return toast('Ingresá una contraseña',true);
+  if(p && p.length<6)return toast('Contraseña mínimo 6 caracteres',true);
+
+  if(editId){
+    // EDIT existing user
+    const u=users.find(x=>x.id===editId);
+    if(!u)return toast('Usuario no encontrado',true);
+    // Check login not taken by another user
+    if(users.find(x=>x.login===l&&x.id!==editId))return toast('Ese nombre de usuario ya existe',true);
+    u.nombre=n; u.login=l; u.rol=r;
+    if(p) u.pass=p;
+    sUS(); closeM('m-usr'); toast('Usuario actualizado'); rusrs();
+  } else {
+    // CREATE new user
+    if(users.find(x=>x.login===l))return toast('Ese usuario ya existe',true);
+    users.push({id:'u_'+Date.now(),nombre:n,login:l,pass:p,rol:r});
+    sUS(); closeM('m-usr'); toast('Usuario creado'); rusrs();
+  }
+  ['un','ul','up','u-edit-id'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+}
+
+function editUsr(id){
+  const u=users.find(x=>x.id===id);
+  if(!u)return;
+  document.getElementById('u-edit-id').value=u.id;
+  document.getElementById('un').value=u.nombre;
+  document.getElementById('ul').value=u.login;
+  document.getElementById('up').value='';
+  document.getElementById('ur').value=u.rol;
+  // Update modal title and password hint
+  document.querySelector('#m-usr .mtitle').textContent='Editar usuario';
+  document.getElementById('up').placeholder='Nueva contraseña (dejá vacío para no cambiar)';
+  openM('m-usr');
+}
+
+function openNewUsr(){
+  document.getElementById('u-edit-id').value='';
   ['un','ul','up'].forEach(id=>document.getElementById(id).value='');
-  rusrs();
+  document.getElementById('ur').value='operador';
+  document.querySelector('#m-usr .mtitle').textContent='Nuevo usuario';
+  document.getElementById('up').placeholder='Mínimo 6 caracteres';
+  openM('m-usr');
+}
+
+function openChgPass(){
+  openM('m-chgpass');
 }
 
 // ─── ITEM ROWS ───────────────────────────────
@@ -1172,6 +1248,23 @@ function loadDemo(){
   db.items=[{id:'i1',facturaId:'f1',material:'Cemento Portland',comprada:200,unidad:'bolsa',entregada:120},{id:'i2',facturaId:'f1',material:'Arena gruesa',comprada:15,unidad:'m³',entregada:15},{id:'i3',facturaId:'f2',material:'Hierro 12mm',comprada:500,unidad:'kg',entregada:200},{id:'i4',facturaId:'f2',material:'Hierro 8mm',comprada:300,unidad:'kg',entregada:300},{id:'i5',facturaId:'f3',material:'Ladrillos',comprada:2000,unidad:'unidad',entregada:2000}];
   db.remitos=[{id:'r1',numero:'REM-0001',facturaId:'f1',fecha:'2025-01-08',notas:'Entrega parcial cemento'},{id:'r2',numero:'REM-0002',facturaId:'f2',fecha:'2025-01-12',notas:'Primera entrega hierros'}];
   sDB();toast('Datos de demo cargados');go('dashboard');
+}
+
+// ─── CHANGE PASSWORD ─────────────────────────
+function doChgPass(){
+  const old=document.getElementById('cp-old').value;
+  const n1=document.getElementById('cp-new').value;
+  const n2=document.getElementById('cp-new2').value;
+  const err=document.getElementById('cp-err');
+  if(old!==me.pass){err.textContent='La contraseña actual es incorrecta';err.style.display='block';return;}
+  if(n1.length<6){err.textContent='La nueva contraseña debe tener al menos 6 caracteres';err.style.display='block';return;}
+  if(n1!==n2){err.textContent='Las contraseñas no coinciden';err.style.display='block';return;}
+  me.pass=n1;
+  const u=users.find(x=>x.id===me.id);
+  if(u) u.pass=n1;
+  sUS();closeM('m-chgpass');toast('Contraseña actualizada correctamente');
+  err.style.display='none';
+  ['cp-old','cp-new','cp-new2'].forEach(id=>document.getElementById(id).value='');
 }
 
 // ─── HELPERS ─────────────────────────────────
