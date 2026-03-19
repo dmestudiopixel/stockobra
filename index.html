@@ -961,23 +961,76 @@ function saveAIRem(){
 }
 function rstAIRem(){document.getElementById('air-res').style.display='none';document.getElementById('air-pv').innerHTML='';document.getElementById('air-f').value='';}
 
-// ─── NOTION ──────────────────────────────────
-async function syncN(type,rec){
-  if(!ncfg.token)return;
-  const dbMap={proveedores:ncfg.pv,facturas:ncfg.fa,items:ncfg.it,remitos:ncfg.re};
-  const dbId=dbMap[type];if(!dbId)return;
-  const pm={
-    proveedores:{'Nombre':{title:[{text:{content:rec.nombre}}]},'Condición de pago':{select:{name:rec.condicion}}},
-    facturas:{'Número de factura':{title:[{text:{content:rec.numero}}]},'Estado':{select:{name:rec.estado}}},
-    remitos:{'Número de remito':{title:[{text:{content:rec.numero}}]},'Notas':{rich_text:[{text:{content:rec.notas||''}}]}}
-  };
-  try{await fetch('https://api.notion.com/v1/pages',{method:'POST',headers:{'Authorization':'Bearer '+ncfg.token,'Content-Type':'application/json','Notion-Version':'2022-06-28'},body:JSON.stringify({parent:{database_id:dbId},properties:pm[type]||{}})});}catch(e){}
+// ─── NOTION (via proxy) ──────────────────────
+async function notionAPI(endpoint, method, data){
+  // Use Netlify function as proxy to avoid CORS
+  const res = await fetch('/.netlify/functions/notion', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({endpoint, method: method||'GET', data, token: ncfg.token})
+  });
+  return res.json();
 }
+
+async function syncN(type, rec){
+  if(!ncfg.token) return;
+  const dbMap={proveedores:ncfg.pv, facturas:ncfg.fa, items:ncfg.it, remitos:ncfg.re};
+  const dbId=dbMap[type]; if(!dbId) return;
+  const propMap={
+    proveedores:{
+      'Nombre':{title:[{text:{content:rec.nombre||''}}]},
+      'Contacto':{rich_text:[{text:{content:rec.contacto||''}}]},
+      'Teléfono':{phone_number:rec.telefono||null},
+      'Condición de pago':{select:{name:rec.condicion||'Contado'}}
+    },
+    facturas:{
+      'Número de factura':{title:[{text:{content:rec.numero||''}}]},
+      'Fecha':rec.fecha?{date:{start:rec.fecha}}:undefined,
+      'Monto total':rec.monto?{number:Number(rec.monto)}:undefined,
+      'Estado':{select:{name:rec.estado||'Abierta'}}
+    },
+    items:{
+      'Material':{title:[{text:{content:rec.material||''}}]},
+      'Cantidad comprada':{number:Number(rec.comprada)||0},
+      'Cantidad entregada':{number:Number(rec.entregada)||0},
+      'Unidad':{select:{name:rec.unidad||'unidad'}}
+    },
+    remitos:{
+      'Número de remito':{title:[{text:{content:rec.numero||''}}]},
+      'Fecha':rec.fecha?{date:{start:rec.fecha}}:undefined,
+      'Notas':{rich_text:[{text:{content:rec.notas||''}}]}
+    }
+  };
+  const props={};
+  const src=propMap[type]||{};
+  Object.entries(src).forEach(([k,v])=>{if(v!==undefined)props[k]=v;});
+  try{
+    await notionAPI('/pages','POST',{parent:{database_id:dbId},properties:props});
+  }catch(e){console.log('Notion sync error:',e);}
+}
+
 async function testNotion(){
-  const t=document.getElementById('cfg-t').value.trim();if(!t)return toast('Ingresá el token',true);
-  const s=document.getElementById('cfg-st');s.innerHTML='<span style="color:var(--amber)">⏳ Probando...</span>';
-  try{const r=await fetch('https://api.notion.com/v1/users/me',{headers:{'Authorization':'Bearer '+t,'Notion-Version':'2022-06-28'}});s.innerHTML=r.ok?'<span style="color:var(--green)">✓ Conectado a Notion</span>':'<span style="color:var(--red)">✕ Token inválido</span>';}
-  catch(e){s.innerHTML='<span style="color:var(--red)">✕ Error de red</span>';}
+  const t=document.getElementById('cfg-t').value.trim();
+  if(!t) return toast('Ingresá el token',true);
+  const s=document.getElementById('cfg-st');
+  s.innerHTML='<span style="color:var(--amber)">⏳ Probando...</span>';
+  try{
+    const res=await fetch('/.netlify/functions/notion',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({endpoint:'/users/me',method:'GET',token:t})
+    });
+    const data=await res.json();
+    if(data.object==='user'||data.type==='person'||data.name){
+      s.innerHTML='<span style="color:var(--green)">✓ Conectado a Notion correctamente</span>';
+    } else if(data.status===401){
+      s.innerHTML='<span style="color:var(--red)">✕ Token inválido — verificá en notion.so/my-integrations</span>';
+    } else {
+      s.innerHTML='<span style="color:var(--red)">✕ Error: '+JSON.stringify(data).substring(0,80)+'</span>';
+    }
+  }catch(e){
+    s.innerHTML='<span style="color:var(--red)">✕ Error de conexión: '+e.message+'</span>';
+  }
 }
 function saveCfg2(){ncfg={token:document.getElementById('cfg-t').value.trim(),pv:document.getElementById('cfg-pv').value.trim(),fa:document.getElementById('cfg-fa').value.trim(),it:document.getElementById('cfg-it').value.trim(),re:document.getElementById('cfg-re').value.trim()};sCF();toast('Configuración guardada');}
 
