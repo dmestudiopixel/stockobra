@@ -236,7 +236,7 @@ textarea{resize:vertical;min-height:70px;}
           <div class="uname" id="sbuname">—</div>
           <div class="urole" id="sbrole">—</div>
         </div>
-        <div class="nbd"><div class="ndot"></div> Notion conectado</div>
+        <div class="nbd" style="cursor:pointer" onclick="loadFromNotion()" title="Sincronizar con Notion"><div class="ndot"></div> <span id="notion-sync-status">Notion conectado</span></div>
         <button class="btn-out" onclick="logout()">⎋ &nbsp;Cerrar sesión</button>
       </div>
     </div>
@@ -703,6 +703,8 @@ function showApp(){
   document.getElementById('sbrole').className='urole '+(isAdm()?'r-admin':'r-op');
   document.getElementById('nav-usr').style.display=isAdm()?'flex':'none';
   go('dashboard');
+  // Auto-load data from Notion if configured
+  if(ncfg.token && ncfg.pv) loadFromNotion();
 }
 
 // ─── SIDEBAR MOBILE ──────────────────────────
@@ -960,6 +962,78 @@ function saveAIRem(){
   sDB();toast('Remito guardado desde foto');rstAIRem();go('stock');
 }
 function rstAIRem(){document.getElementById('air-res').style.display='none';document.getElementById('air-pv').innerHTML='';document.getElementById('air-f').value='';}
+
+
+// ─── CARGAR DATOS DESDE NOTION ───────────────
+async function loadFromNotion(){
+  if(!ncfg.token||!ncfg.pv) return; // no config yet
+  const statusEl = document.getElementById('notion-sync-status');
+  if(statusEl) statusEl.textContent = '⟳ Sincronizando...';
+  
+  try{
+    // Load proveedores
+    if(ncfg.pv){
+      const r = await notionAPI('/databases/'+ncfg.pv+'/query','POST',{page_size:100});
+      if(r.results){
+        db.proveedores = r.results.map(p=>({
+          id: p.id,
+          nombre: p.properties['Nombre']?.title?.[0]?.text?.content || '',
+          contacto: p.properties['Contacto']?.rich_text?.[0]?.text?.content || '',
+          telefono: p.properties['Teléfono']?.phone_number || '',
+          condicion: p.properties['Condición de pago']?.select?.name || 'Contado'
+        })).filter(p=>p.nombre);
+      }
+    }
+    // Load facturas
+    if(ncfg.fa){
+      const r = await notionAPI('/databases/'+ncfg.fa+'/query','POST',{page_size:100});
+      if(r.results){
+        db.facturas = r.results.map(f=>({
+          id: f.id,
+          numero: f.properties['Número de factura']?.title?.[0]?.text?.content || '',
+          proveedorId: f.properties['Proveedor']?.relation?.[0]?.id || '',
+          fecha: f.properties['Fecha']?.date?.start || '',
+          monto: f.properties['Monto total']?.number || 0,
+          estado: f.properties['Estado']?.select?.name || 'Abierta'
+        })).filter(f=>f.numero);
+      }
+    }
+    // Load items
+    if(ncfg.it){
+      const r = await notionAPI('/databases/'+ncfg.it+'/query','POST',{page_size:100});
+      if(r.results){
+        db.items = r.results.map(i=>({
+          id: i.id,
+          material: i.properties['Material']?.title?.[0]?.text?.content || '',
+          facturaId: i.properties['Factura']?.relation?.[0]?.id || '',
+          comprada: i.properties['Cantidad comprada']?.number || 0,
+          entregada: i.properties['Cantidad entregada']?.number || 0,
+          unidad: i.properties['Unidad']?.select?.name || 'unidad'
+        })).filter(i=>i.material);
+      }
+    }
+    // Load remitos
+    if(ncfg.re){
+      const r = await notionAPI('/databases/'+ncfg.re+'/query','POST',{page_size:100});
+      if(r.results){
+        db.remitos = r.results.map(r2=>({
+          id: r2.id,
+          numero: r2.properties['Número de remito']?.title?.[0]?.text?.content || '',
+          facturaId: r2.properties['Factura relacionada']?.relation?.[0]?.id || '',
+          fecha: r2.properties['Fecha']?.date?.start || '',
+          notas: r2.properties['Notas']?.rich_text?.[0]?.text?.content || ''
+        })).filter(r2=>r2.numero);
+      }
+    }
+    sDB(); // save to localStorage as cache
+    if(statusEl) statusEl.textContent = '✓ Sincronizado';
+    rdash(); // refresh dashboard
+    toast('Datos sincronizados desde Notion');
+  }catch(e){
+    console.log('Error loading from Notion:',e);
+    if(statusEl) statusEl.textContent = '✕ Error al sincronizar';
+  }
+}
 
 // ─── NOTION (via proxy) ──────────────────────
 async function notionAPI(endpoint, method, data){
